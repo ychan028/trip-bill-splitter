@@ -1,0 +1,4 @@
+# Add your LoopNet listing URLs here, one per line
+# Example:
+# https://www.loopnet.com/Listing/123-Main-St-Chicago-IL/12345678/
+# https://www.loopnet.com/Listing/456-Oak-Ave-Springfield-IL/87654321/
