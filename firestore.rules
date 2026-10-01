@@ -40,10 +40,15 @@ service cloud.firestore {
 
       match /receipts/{id} {
         allow read: if isMember(code);
+        // Only an inline image may be stored: the app renders dataUrl as a link
+        // and <img>, so an http(s) or script URL here would reach other members.
         allow create, update: if isMember(code)
+          && request.resource.data.keys().hasOnly(['id', 'dataUrl', 'createdBy', 'createdAt'])
           && request.resource.data.id == id
+          && request.resource.data.createdBy == myPerson(code)
           && request.resource.data.dataUrl is string
-          && request.resource.data.dataUrl.size() < 900000;
+          && request.resource.data.dataUrl.size() < 900000
+          && request.resource.data.dataUrl.matches('data:image/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+');
         allow delete: if false;
       }
 
