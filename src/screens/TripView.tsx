@@ -104,6 +104,7 @@ function ExpensesTab({ data, trip }: { data: TripData; trip: Trip }) {
                       {e.isSettlement ? "Payment" : `${e.category} · paid by ${payers(e, nameOf)}`} · added by {nameOf(e.createdBy)}
                       {e.updatedBy !== e.createdBy || e.updatedAt - e.createdAt > 60000 ? ` · edited by ${nameOf(e.updatedBy)}` : ""}
                       {e.deleted ? ` · deleted by ${nameOf(e.deletedBy ?? "")}` : ""}
+                      {e.hasReceipt ? " · receipt" : ""}
                     </small>
                   </span>
                   <span className="amount">

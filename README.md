@@ -36,7 +36,12 @@ syncs between phones through Firebase Firestore when online.
   Optionally paste an Anthropic API key under Trip → Receipt scanning to have
   Claude read receipts when online (better accuracy, line items into notes).
   The key is stored only in that phone's browser storage, never in the repo or
-  Firebase. Photos are not stored; only the extracted text is kept.
+  Firebase.
+- Receipt photos: scanned photos (or ones added with "Add photo") are compressed
+  to roughly 1000 px / under 250 KB and stored in Firestore next to the expense,
+  so both phones can view them; they sync like everything else. After pulling
+  this change, re-publish `firestore.rules` in the Firebase console (it adds the
+  `receipts` collection).
 - Balances tab: who owes whom (fewest transfers), net per person, raw per-currency
   balances, spending by category, CSV export.
 

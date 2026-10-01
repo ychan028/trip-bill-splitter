@@ -2,11 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CURRENCIES, go, hashQuery, useStore } from "../app-context";
 import { describeClaudeError, getApiKey, parseReceiptWithClaude } from "../lib/claude-receipt";
 import { rateToBase, todayIso, type RateResult } from "../lib/fx";
-import { prepareImage, recognizeText } from "../lib/ocr";
+import { compressForStorage, prepareImage, recognizeText } from "../lib/ocr";
 import { parseReceipt } from "../lib/receipt";
 import { randomId } from "../lib/ids";
 import { currencyDecimals, formatMoney, minorToInput, owedShares, parseAmount, validateSplit } from "../lib/money";
-import type { Expense, SplitMode, Trip } from "../lib/types";
+import type { Expense, ReceiptPhoto, SplitMode, Trip } from "../lib/types";
 import { useTrip } from "./useTrip";
 
 interface Props {
@@ -87,6 +87,14 @@ function Form({ trip, me, existing, isSettlement, nameOf }: {
   const [receiptText, setReceiptText] = useState(existing?.receiptText);
   const [scan, setScan] = useState<{ busy: boolean; msg: string } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const photoInput = useRef<HTMLInputElement>(null);
+  const [photo, setPhoto] = useState<Blob | null>(null);
+  const [showSaved, setShowSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const photoUrl = useMemo(() => (photo ? URL.createObjectURL(photo) : null), [photo]);
+  useEffect(() => () => {
+    if (photoUrl) URL.revokeObjectURL(photoUrl);
+  }, [photoUrl]);
 
   function knownCurrency(c?: string | null) {
     if (!c || !/^[A-Z]{3}$/.test(c)) return undefined;
@@ -127,6 +135,7 @@ function Form({ trip, me, existing, isSettlement, nameOf }: {
 
   async function onReceipt(file: File) {
     setScan({ busy: true, msg: "Preparing photo…" });
+    setPhoto(file);
     try {
       const img = await prepareImage(file);
       if (getApiKey() && navigator.onLine) {
@@ -238,6 +247,7 @@ function Form({ trip, me, existing, isSettlement, nameOf }: {
       split,
       isSettlement,
       receiptText,
+      hasReceipt: photo ? true : existing?.hasReceipt,
       createdBy: existing?.createdBy ?? me,
       createdAt: existing?.createdAt ?? now,
       updatedBy: me,
@@ -247,11 +257,22 @@ function Form({ trip, me, existing, isSettlement, nameOf }: {
     };
   }
 
-  function save() {
+  async function save() {
     const e = build();
     if (typeof e === "string") {
       setError(e);
       return;
+    }
+    if (photo) {
+      setSaving(true);
+      try {
+        const dataUrl = await compressForStorage(photo);
+        store.saveReceipt(trip.code, { id: e.id, dataUrl, createdBy: me, createdAt: Date.now() });
+      } catch (err) {
+        setSaving(false);
+        setError(`Couldn't save the photo: ${(err as Error).message}. Remove it or try another.`);
+        return;
+      }
     }
     localStorage.setItem(lastCurKey, currency);
     store.saveExpense(trip.code, e);
@@ -311,10 +332,39 @@ function Form({ trip, me, existing, isSettlement, nameOf }: {
               if (f) onReceipt(f);
             }}
           />
+          <input
+            ref={photoInput}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (f) setPhoto(f);
+            }}
+          />
           <button type="button" disabled={scan?.busy} onClick={() => fileInput.current?.click()}>
             {scan?.busy ? "Scanning…" : "Scan receipt"}
           </button>
+          <button type="button" disabled={scan?.busy} onClick={() => photoInput.current?.click()}>
+            {photo || existing?.hasReceipt ? "Replace photo" : "Add photo"}
+          </button>
           {scan && <small className="muted">{scan.msg}</small>}
+        </div>
+      )}
+      {photoUrl && (
+        <div className="photo">
+          <img src={photoUrl} alt="Receipt photo to be saved" />
+          <button type="button" className="link" onClick={() => setPhoto(null)}>Remove photo</button>
+        </div>
+      )}
+      {!photo && existing?.hasReceipt && (
+        <div className="photo">
+          <button type="button" className="link" onClick={() => setShowSaved((v) => !v)}>
+            {showSaved ? "Hide receipt photo" : "View receipt photo"}
+          </button>
+          {showSaved && <SavedReceipt code={trip.code} id={existing.id} />}
         </div>
       )}
 
@@ -453,7 +503,7 @@ function Form({ trip, me, existing, isSettlement, nameOf }: {
 
       {error && <p className="error">{error}</p>}
       <div className="actions">
-        <button className="primary" onClick={save}>Save</button>
+        <button className="primary" disabled={saving} onClick={save}>{saving ? "Saving…" : "Save"}</button>
         {existing && !existing.deleted && <button className="danger" onClick={() => setDeleted(true)}>Delete</button>}
         {existing?.deleted && <button onClick={() => setDeleted(false)}>Restore</button>}
       </div>
@@ -461,3 +511,16 @@ function Form({ trip, me, existing, isSettlement, nameOf }: {
   );
 }
 
+
+function SavedReceipt({ code, id }: { code: string; id: string }) {
+  const store = useStore();
+  const [r, setR] = useState<ReceiptPhoto | null | undefined>(undefined);
+  useEffect(() => store.watchReceipt(code, id, setR), [store, code, id]);
+  if (r === undefined) return <p className="muted small">Loading photo…</p>;
+  if (r === null) return <p className="muted small">Photo hasn't synced to this phone yet. It will appear once the phone that took it is online.</p>;
+  return (
+    <a href={r.dataUrl} target="_blank" rel="noreferrer">
+      <img src={r.dataUrl} alt="Receipt" />
+    </a>
+  );
+}

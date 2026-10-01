@@ -1,4 +1,4 @@
-import type { Expense, Person, Trip } from "../lib/types";
+import type { Expense, Person, ReceiptPhoto, Trip } from "../lib/types";
 
 export type Unsub = () => void;
 
@@ -24,4 +24,7 @@ export interface Store {
   setMyPerson(code: string, personId: string, addPerson?: Person): void;
   /** Writes the full expense document. Fire-and-forget: queued while offline. */
   saveExpense(code: string, e: Expense): void;
+  /** Fire-and-forget like saveExpense; syncs when back online. */
+  saveReceipt(code: string, r: ReceiptPhoto): void;
+  watchReceipt(code: string, expenseId: string, cb: (r: ReceiptPhoto | null) => void): Unsub;
 }

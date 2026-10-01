@@ -36,6 +36,8 @@ export interface Expense {
   split: { mode: SplitMode; parts: Record<string, number> };
   isSettlement: boolean;
   receiptText?: string;
+  /** A photo is stored in trips/{code}/receipts/{expense id}. */
+  hasReceipt?: boolean;
   createdBy: string;
   createdAt: number;
   updatedBy: string;
@@ -55,3 +57,11 @@ export const DEFAULT_CATEGORIES = [
   "Fees",
   "Other",
 ];
+
+/** Compressed receipt photo, kept in its own document so expense lists stay light. */
+export interface ReceiptPhoto {
+  id: string; // same as the expense id
+  dataUrl: string; // image/jpeg data URL, kept well under Firestore's 1 MiB document limit
+  createdBy: string;
+  createdAt: number;
+}

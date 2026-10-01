@@ -16,6 +16,28 @@ export async function prepareImage(file: Blob, maxSide = 1600): Promise<Blob> {
   );
 }
 
+/**
+ * Compress a photo for storage in a Firestore document (1 MiB limit, shared
+ * with the base64 overhead). Steps down size and quality until it fits.
+ */
+export async function compressForStorage(file: Blob, maxBytes = 250_000): Promise<string> {
+  const bmp = await createImageBitmap(file);
+  try {
+    for (const [side, quality] of [[1200, 0.6], [1000, 0.5], [800, 0.45], [640, 0.4]] as const) {
+      const scale = Math.min(1, side / Math.max(bmp.width, bmp.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(bmp.width * scale);
+      canvas.height = Math.round(bmp.height * scale);
+      canvas.getContext("2d")!.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+      const url = canvas.toDataURL("image/jpeg", quality);
+      if (url.length <= maxBytes) return url;
+    }
+    throw new Error("Photo is too large to store");
+  } finally {
+    bmp.close();
+  }
+}
+
 export async function recognizeText(image: Blob, onProgress?: (pct: number) => void): Promise<string> {
   const { createWorker } = await import("tesseract.js");
   const asset = (p: string) => new URL(`tesseract/${p}`, document.baseURI).href;

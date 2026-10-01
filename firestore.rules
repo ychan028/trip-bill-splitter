@@ -28,6 +28,15 @@ service cloud.firestore {
         && request.resource.data.members.hasAll(resource.data.members);
       allow delete: if false;
 
+      match /receipts/{id} {
+        allow read: if isMember(code);
+        allow create, update: if isMember(code)
+          && request.resource.data.id == id
+          && request.resource.data.dataUrl is string
+          && request.resource.data.dataUrl.size() < 900000;
+        allow delete: if false;
+      }
+
       match /expenses/{id} {
         allow read: if isMember(code);
         allow create: if isMember(code) && request.resource.data.id == id;
