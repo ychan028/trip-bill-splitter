@@ -1,10 +1,11 @@
 import { randomCode, randomId } from "../lib/ids";
-import type { Expense, Trip } from "../lib/types";
+import type { Expense, ReceiptPhoto, Trip } from "../lib/types";
 import type { NewTrip, Store } from "./types";
 
 // Single-device store used when no Firebase config is set.
 const TRIPS = "local:trips";
 const EXP = (code: string) => `local:expenses:${code}`;
+const RECEIPT = (code: string, id: string) => `local:receipt:${code}:${id}`;
 
 function read<T>(k: string, fallback: T): T {
   try {
@@ -67,6 +68,14 @@ export function createLocalStore(): Store {
         memberPeople: { ...t.memberPeople, [me]: personId },
       });
     },
+    saveReceipt(code, r: ReceiptPhoto) {
+      try {
+        write(RECEIPT(code, r.id), r);
+      } catch {
+        window.dispatchEvent(new CustomEvent("store-error", { detail: "Phone storage is full; photo not saved" }));
+      }
+    },
+    watchReceipt: (code, id, cb) => subscribe(() => cb(read<ReceiptPhoto | null>(RECEIPT(code, id), null))),
     saveExpense(code, e) {
       const list = read<Expense[]>(EXP(code), []);
       const i = list.findIndex((x) => x.id === e.id);
