@@ -2,7 +2,10 @@ import { minorToInput, owedShares } from "./money";
 import type { Expense, Trip } from "./types";
 
 function cell(v: string | number): string {
-  const s = String(v);
+  let s = String(v);
+  // Spreadsheets run text starting with = + - @ (or tab/CR) as a formula; prefix
+  // a quote so typed descriptions stay text. Plain numbers like -12.50 are left alone.
+  if (/^[=+\-@\t\r]/.test(s) && !/^-?\d+(\.\d+)?$/.test(s)) s = `'${s}`;
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
