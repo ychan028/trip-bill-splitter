@@ -518,6 +518,8 @@ function SavedReceipt({ code, id }: { code: string; id: string }) {
   useEffect(() => store.watchReceipt(code, id, setR), [store, code, id]);
   if (r === undefined) return <p className="muted small">Loading photo…</p>;
   if (r === null) return <p className="muted small">Photo hasn't synced to this phone yet. It will appear once the phone that took it is online.</p>;
+  // Rendered as a link target, so never trust anything but an inline image.
+  if (!/^data:image\/(jpeg|png|webp);base64,/.test(r.dataUrl)) return <p className="muted small">This photo can't be shown.</p>;
   return (
     <a href={r.dataUrl} target="_blank" rel="noreferrer">
       <img src={r.dataUrl} alt="Receipt" />
