@@ -2,6 +2,7 @@ import QRCode from "qrcode";
 import { useEffect, useMemo, useState } from "react";
 import { CURRENCIES, go, useStore } from "../app-context";
 import { computeBalances, settleUp } from "../lib/balances";
+import { getApiKey, setApiKey } from "../lib/claude-receipt";
 import { toCsv } from "../lib/csv";
 import { formatCode, randomId } from "../lib/ids";
 import { currencyDecimals, formatMoney, owedShares } from "../lib/money";
@@ -103,6 +104,7 @@ function ExpensesTab({ data, trip }: { data: TripData; trip: Trip }) {
                       {e.isSettlement ? "Payment" : `${e.category} · paid by ${payers(e, nameOf)}`} · added by {nameOf(e.createdBy)}
                       {e.updatedBy !== e.createdBy || e.updatedAt - e.createdAt > 60000 ? ` · edited by ${nameOf(e.updatedBy)}` : ""}
                       {e.deleted ? ` · deleted by ${nameOf(e.deletedBy ?? "")}` : ""}
+                      {e.hasReceipt ? " · receipt" : ""}
                     </small>
                   </span>
                   <span className="amount">
@@ -337,6 +339,8 @@ function SettingsTab({ data, trip }: { data: TripData; trip: Trip }) {
 
       <FixedRates data={data} trip={trip} />
 
+      <ReceiptSettings />
+
       <h2>Home currency</h2>
       {hasExpenses ? (
         <p>
@@ -399,6 +403,54 @@ function FixedRates({ data, trip }: { data: TripData; trip: Trip }) {
           {CURRENCIES.filter((c) => c !== base && !list.includes(c)).map((c) => <option key={c}>{c}</option>)}
         </select>
       </div>
+    </>
+  );
+}
+
+function ReceiptSettings() {
+  const [key, setKey] = useState(getApiKey());
+  const [saved, setSaved] = useState(!!getApiKey());
+  return (
+    <>
+      <h2>Receipt scanning</h2>
+      <p className="muted small">
+        "Scan receipt" reads the photo on this phone, offline. For better results when online, paste an Anthropic
+        API key: receipts are then read by Claude (roughly a cent or two each). The key stays on this phone only;
+        it isn't synced or shared with the trip.
+      </p>
+      <div className="inline-form">
+        <input
+          type="password"
+          autoComplete="off"
+          placeholder="sk-ant-…"
+          value={key}
+          onChange={(e) => {
+            setKey(e.target.value);
+            setSaved(false);
+          }}
+          aria-label="Anthropic API key"
+        />
+        <button
+          onClick={() => {
+            setApiKey(key);
+            setSaved(!!key.trim());
+          }}
+        >
+          {saved ? "Saved" : "Save"}
+        </button>
+      </div>
+      {saved && (
+        <button
+          className="link"
+          onClick={() => {
+            setApiKey("");
+            setKey("");
+            setSaved(false);
+          }}
+        >
+          Remove key from this phone
+        </button>
+      )}
     </>
   );
 }

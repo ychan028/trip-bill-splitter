@@ -1,6 +1,21 @@
 import react from "@vitejs/plugin-react";
+import { cpSync, mkdirSync } from "node:fs";
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
+
+// Serve Tesseract (OCR) from our own origin so it can be precached for offline use.
+// Only the LSTM cores are needed (OEM 1); the worker picks one by CPU features.
+function copyOcrAssets() {
+  const out = "public/tesseract";
+  mkdirSync(`${out}/core`, { recursive: true });
+  mkdirSync(`${out}/lang`, { recursive: true });
+  cpSync("node_modules/tesseract.js/dist/worker.min.js", `${out}/worker.min.js`);
+  for (const v of ["lstm", "simd-lstm", "relaxedsimd-lstm"]) {
+    cpSync(`node_modules/tesseract.js-core/tesseract-core-${v}.wasm.js`, `${out}/core/tesseract-core-${v}.wasm.js`);
+  }
+  cpSync("node_modules/@tesseract.js-data/eng/4.0.0_best_int/eng.traineddata.gz", `${out}/lang/eng.traineddata.gz`);
+}
+copyOcrAssets();
 
 export default defineConfig({
   // Relative base so the build works at any GitHub Pages path (repo name can change).

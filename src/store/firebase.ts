@@ -15,7 +15,7 @@ import {
   where,
 } from "firebase/firestore";
 import { randomCode } from "../lib/ids";
-import type { Expense, Trip } from "../lib/types";
+import type { Expense, ReceiptPhoto, Trip } from "../lib/types";
 import type { NewTrip, Store } from "./types";
 
 function report(err: unknown) {
@@ -108,6 +108,16 @@ export async function createFirebaseStore(config: FirebaseOptions): Promise<Stor
       const patch: Record<string, unknown> = { [`memberPeople.${uid}`]: personId };
       if (addPerson) patch.people = arrayUnion(addPerson);
       updateDoc(tripRef(code), patch).catch(report);
+    },
+    saveReceipt(code, r) {
+      setDoc(doc(db, "trips", code, "receipts", r.id), r).catch(report);
+    },
+    watchReceipt(code, id, cb) {
+      return onSnapshot(
+        doc(db, "trips", code, "receipts", id),
+        (snap) => cb(snap.exists() ? (snap.data() as ReceiptPhoto) : null),
+        report,
+      );
     },
     saveExpense(code, e) {
       setDoc(doc(expCol(code), e.id), e).catch(report);

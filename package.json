@@ -11,10 +11,13 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
+    "@tesseract.js-data/eng": "^1.0.0",
     "firebase": "^12.19.0",
     "qrcode": "^1.5.4",
     "react": "^19.3.0",
-    "react-dom": "^19.3.0"
+    "react-dom": "^19.3.0",
+    "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
     "@types/qrcode": "^1.5.6",
