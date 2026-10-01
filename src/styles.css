@@ -145,3 +145,4 @@ tr.total td { font-weight: 600; }
 .inline-form { display: flex; gap: 8px; align-items: center; }
 .inline-form input { margin: 0; }
 .list li.row input { margin: 0; }
+.scan { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }

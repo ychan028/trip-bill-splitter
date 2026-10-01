@@ -31,6 +31,12 @@ syncs between phones through Firebase Firestore when online.
   trip rate if you set one under Trip → Exchange rates, or your own rate on the
   expense. Entered offline with no rate known? It's marked pending and filled in
   when a phone is next online.
+- Receipt scanning: "Scan receipt" on the expense form reads the photo on the
+  phone (Tesseract, works offline) and pre-fills total, currency, date and shop.
+  Optionally paste an Anthropic API key under Trip → Receipt scanning to have
+  Claude read receipts when online (better accuracy, line items into notes).
+  The key is stored only in that phone's browser storage, never in the repo or
+  Firebase. Photos are not stored; only the extracted text is kept.
 - Balances tab: who owes whom (fewest transfers), net per person, raw per-currency
   balances, spending by category, CSV export.
 

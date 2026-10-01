@@ -1,6 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CURRENCIES, go, hashQuery, useStore } from "../app-context";
+import { describeClaudeError, getApiKey, parseReceiptWithClaude } from "../lib/claude-receipt";
 import { rateToBase, todayIso, type RateResult } from "../lib/fx";
+import { prepareImage, recognizeText } from "../lib/ocr";
+import { parseReceipt } from "../lib/receipt";
 import { randomId } from "../lib/ids";
 import { currencyDecimals, formatMoney, minorToInput, owedShares, parseAmount, validateSplit } from "../lib/money";
 import type { Expense, SplitMode, Trip } from "../lib/types";
@@ -81,6 +84,80 @@ function Form({ trip, me, existing, isSettlement, nameOf }: {
   const [useManual, setUseManual] = useState(!!init.manualRate);
   const [rate, setRate] = useState<RateResult | null | "loading">(null);
   const [error, setError] = useState<string | null>(null);
+  const [receiptText, setReceiptText] = useState(existing?.receiptText);
+  const [scan, setScan] = useState<{ busy: boolean; msg: string } | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  function knownCurrency(c?: string | null) {
+    if (!c || !/^[A-Z]{3}$/.test(c)) return undefined;
+    try {
+      new Intl.NumberFormat("en", { style: "currency", currency: c });
+      return c;
+    } catch {
+      return undefined;
+    }
+  }
+
+  function applyScan(f: { total?: number | null; currency?: string | null; date?: string | null; merchant?: string | null; category?: string | null }) {
+    const filled: string[] = [];
+    const cur = knownCurrency(f.currency) ?? currency;
+    if (f.currency && cur === f.currency) {
+      setCurrency(cur);
+      filled.push(cur);
+    }
+    if (f.total && f.total > 0) {
+      setAmount(minorToInput(Math.round(f.total * 10 ** currencyDecimals(cur)), cur));
+      filled.push("total");
+    }
+    if (f.date && /^\d{4}-\d{2}-\d{2}$/.test(f.date)) {
+      setDate(f.date);
+      filled.push("date");
+    }
+    if (f.merchant && !description.trim()) {
+      setDescription(f.merchant);
+      filled.push("description");
+    }
+    const cat = f.category && trip.categories.find((c) => c.toLowerCase() === f.category!.toLowerCase());
+    if (cat && !category) {
+      setCategory(cat);
+      filled.push("category");
+    }
+    return filled;
+  }
+
+  async function onReceipt(file: File) {
+    setScan({ busy: true, msg: "Preparing photo…" });
+    try {
+      const img = await prepareImage(file);
+      if (getApiKey() && navigator.onLine) {
+        try {
+          setScan({ busy: true, msg: "Reading receipt with Claude…" });
+          const r = await parseReceiptWithClaude(img, { categories: trip.categories });
+          const filled = applyScan(r);
+          if (r.items.length) {
+            const lines = r.items.map((i) => `${i.name}: ${i.amount}`).join("\n");
+            setNotes((n) => (n ? `${n}\n${lines}` : lines));
+          }
+          setReceiptText(JSON.stringify(r).slice(0, 4000));
+          setScan({ busy: false, msg: filled.length ? `Filled ${filled.join(", ")}. Check before saving.` : "Couldn't read this receipt; enter it manually." });
+          return;
+        } catch (e) {
+          setScan({ busy: true, msg: `${describeClaudeError(e)} Trying on-device…` });
+        }
+      }
+      const text = await recognizeText(img, (pct) => setScan({ busy: true, msg: `Reading receipt on this phone… ${pct}%` }));
+      const filled = applyScan(parseReceipt(text));
+      setReceiptText(text.slice(0, 4000));
+      setScan({
+        busy: false,
+        msg: filled.length
+          ? `Filled ${filled.join(", ")}. On-device reading makes mistakes: check before saving.`
+          : "Couldn't find a total; enter it manually.",
+      });
+    } catch (e) {
+      setScan({ busy: false, msg: `Scan failed: ${(e as Error).message}` });
+    }
+  }
 
   useEffect(() => {
     let live = true;
@@ -160,7 +237,7 @@ function Form({ trip, me, existing, isSettlement, nameOf }: {
       paidBy,
       split,
       isSettlement,
-      receiptText: existing?.receiptText,
+      receiptText,
       createdBy: existing?.createdBy ?? me,
       createdAt: existing?.createdAt ?? now,
       updatedBy: me,
@@ -218,6 +295,27 @@ function Form({ trip, me, existing, isSettlement, nameOf }: {
           {existing.updatedAt !== existing.createdAt && ` · last edited by ${nameOf(existing.updatedBy)} ${new Date(existing.updatedAt).toLocaleString()}`}
           {existing.deleted && ` · deleted by ${nameOf(existing.deletedBy ?? "")}`}
         </p>
+      )}
+
+      {!isSettlement && (
+        <div className="scan">
+          <input
+            ref={fileInput}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (f) onReceipt(f);
+            }}
+          />
+          <button type="button" disabled={scan?.busy} onClick={() => fileInput.current?.click()}>
+            {scan?.busy ? "Scanning…" : "Scan receipt"}
+          </button>
+          {scan && <small className="muted">{scan.msg}</small>}
+        </div>
       )}
 
       <div className="amount-row">
