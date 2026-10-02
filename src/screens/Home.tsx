@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { go, useStore } from "../app-context";
 import { formatCode } from "../lib/ids";
 import type { Trip } from "../lib/types";
+import { OfflineStatus } from "./OfflineStatus";
 
 export function Home() {
   const store = useStore();
@@ -11,6 +12,7 @@ export function Home() {
   return (
     <main className="page">
       <h1>Trips</h1>
+      <OfflineStatus />
       {trips === null && <p className="muted">Loading…</p>}
       {trips?.length === 0 && <p className="muted">No trips yet. Create one, or join with a code from a friend.</p>}
       <ul className="list">
