@@ -17,6 +17,9 @@ function copyOcrAssets() {
 }
 copyOcrAssets();
 
+// Keep in sync with OCR_CACHE in src/lib/ocr.ts.
+const OCR_CACHE = "ocr-assets-v1";
+
 export default defineConfig({
   // Relative base so the build works at any GitHub Pages path (repo name can change).
   base: "./",
@@ -41,8 +44,18 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ["**/*.{js,css,html,svg,png,wasm,traineddata,gz}"],
-        maximumFileSizeToCacheInBytes: 20 * 1024 * 1024,
+        globPatterns: ["**/*.{js,css,html,svg,png}"],
+        // OCR files (~15 MB) are not part of the app install: on a slow
+        // connection they made the first load crawl. They are cached on first
+        // use, or when the user taps "Prepare offline scanning".
+        globIgnores: ["tesseract/**"],
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }) => url.pathname.includes("/tesseract/"),
+            handler: "CacheFirst",
+            options: { cacheName: OCR_CACHE, cacheableResponse: { statuses: [200] } },
+          },
+        ],
       },
     }),
   ],

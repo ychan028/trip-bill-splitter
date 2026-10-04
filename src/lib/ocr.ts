@@ -38,10 +38,30 @@ export async function compressForStorage(file: Blob, maxBytes = 250_000): Promis
   }
 }
 
-export async function recognizeText(image: Blob, onProgress?: (pct: number) => void): Promise<string> {
+// Keep in sync with OCR_CACHE in vite.config.ts.
+const OCR_CACHE = "ocr-assets-v1";
+
+/** True when the language data and a core are cached, so scanning works offline. */
+export async function isOcrReady(): Promise<boolean> {
+  try {
+    if (!("caches" in window) || !(await caches.has(OCR_CACHE))) return false;
+    const keys = (await (await caches.open(OCR_CACHE)).keys()).map((r) => r.url);
+    return keys.some((u) => u.includes("eng.traineddata")) && keys.some((u) => u.includes("tesseract-core"));
+  } catch {
+    return false;
+  }
+}
+
+/** Download exactly the OCR files this device needs (~7 MB) by starting and stopping a worker. */
+export async function prepareOcr(): Promise<void> {
+  const worker = await makeWorker();
+  await worker.terminate();
+}
+
+async function makeWorker(onProgress?: (pct: number) => void) {
   const { createWorker } = await import("tesseract.js");
   const asset = (p: string) => new URL(`tesseract/${p}`, document.baseURI).href;
-  const worker = await createWorker("eng", 1, {
+  return createWorker("eng", 1, {
     workerPath: asset("worker.min.js"),
     corePath: asset("core"),
     langPath: asset("lang"),
@@ -49,6 +69,18 @@ export async function recognizeText(image: Blob, onProgress?: (pct: number) => v
       if (m.status === "recognizing text") onProgress?.(Math.round(m.progress * 100));
     },
   });
+}
+
+export async function recognizeText(image: Blob, onProgress?: (pct: number) => void): Promise<string> {
+  let worker;
+  try {
+    worker = await makeWorker(onProgress);
+  } catch (e) {
+    if (!(await isOcrReady())) {
+      throw new Error("the scanner isn't downloaded on this phone yet. When online, tap Trip → Prepare offline scanning, or scan once with a connection");
+    }
+    throw e instanceof Error ? e : new Error(String(e ?? "unknown error"));
+  }
   try {
     const { data } = await worker.recognize(image);
     return data.text;
