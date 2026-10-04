@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { CURRENCIES, go, useStore } from "../app-context";
 import { computeBalances, settleUp } from "../lib/balances";
 import { getApiKey, setApiKey } from "../lib/claude-receipt";
+import { isOcrReady, prepareOcr } from "../lib/ocr";
 import { toCsv } from "../lib/csv";
 import { formatCode, randomId } from "../lib/ids";
 import { currencyDecimals, formatMoney, owedShares } from "../lib/money";
@@ -410,9 +411,31 @@ function FixedRates({ data, trip }: { data: TripData; trip: Trip }) {
 function ReceiptSettings() {
   const [key, setKey] = useState(getApiKey());
   const [saved, setSaved] = useState(!!getApiKey());
+  const [ocr, setOcr] = useState<"checking" | "ready" | "missing" | "downloading" | "failed">("checking");
+  useEffect(() => {
+    isOcrReady().then((r) => setOcr(r ? "ready" : "missing"));
+  }, []);
+  async function download() {
+    setOcr("downloading");
+    try {
+      await prepareOcr();
+      setOcr((await isOcrReady()) ? "ready" : "failed");
+    } catch {
+      setOcr("failed");
+    }
+  }
   return (
     <>
       <h2>Receipt scanning</h2>
+      {ocr === "ready" && <p className="ok small">Offline scanning is ready on this phone.</p>}
+      {(ocr === "missing" || ocr === "failed") && (
+        <p className="small">
+          {ocr === "failed" ? "Download didn't finish. " : ""}To scan receipts without a connection, download the
+          scanner once (about 7 MB, best on Wi-Fi).{" "}
+          <button onClick={download}>Prepare offline scanning</button>
+        </p>
+      )}
+      {ocr === "downloading" && <p className="muted small">Downloading the scanner… keep this screen open.</p>}
       <p className="muted small">
         "Scan receipt" reads the photo on this phone, offline. For better results when online, paste an Anthropic
         API key: receipts are then read by Claude (roughly a cent or two each). The key stays on this phone only;

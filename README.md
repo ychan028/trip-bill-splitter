@@ -32,7 +32,8 @@ syncs between phones through Firebase Firestore when online.
   expense. Entered offline with no rate known? It's marked pending and filled in
   when a phone is next online.
 - Receipt scanning: "Scan receipt" on the expense form reads the photo on the
-  phone (Tesseract, works offline) and pre-fills total, currency, date and shop.
+  phone (Tesseract; works offline after the ~7 MB scanner is downloaded, either
+  by scanning once online or via Trip → Prepare offline scanning) and pre-fills total, currency, date and shop.
   Optionally paste an Anthropic API key under Trip → Receipt scanning to have
   Claude read receipts when online (better accuracy, line items into notes).
   The key is stored only in that phone's browser storage, never in the repo or

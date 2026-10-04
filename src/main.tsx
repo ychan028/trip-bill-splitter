@@ -4,7 +4,9 @@ import { registerSW } from "virtual:pwa-register";
 import { App } from "./App";
 import "./styles.css";
 
-registerSW({ immediate: true });
+// Register after the page has loaded so the offline download never competes
+// with the app's own first load on a slow connection.
+registerSW();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
