@@ -51,7 +51,7 @@ export function TripView({ code, tab = "expenses" }: { code: string; tab?: strin
       {tab === "balances" ? <BalancesTab data={data} trip={trip} /> : null}
       {tab === "settings" ? <SettingsTab data={data} trip={trip} /> : null}
       {tab !== "balances" && tab !== "settings" ? <ExpensesTab data={data} trip={trip} /> : null}
-      <a className="fab" href={`#/trip/${code}/add`}>+ Add expense</a>
+      {tab !== "settings" && <a className="fab" href={`#/trip/${code}/add`}>+ Add expense</a>}
     </main>
   );
 }
