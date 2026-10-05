@@ -5,7 +5,7 @@ import { rateToBase, todayIso, type RateResult } from "../lib/fx";
 import { compressForStorage, prepareImage, recognizeText } from "../lib/ocr";
 import { parseReceipt } from "../lib/receipt";
 import { randomId } from "../lib/ids";
-import { currencyDecimals, formatMoney, minorToInput, owedShares, parseAmount, validateSplit } from "../lib/money";
+import { currencyDecimals, fillRemainder, formatMoney, minorToInput, owedShares, parseAmount, validateSplit } from "../lib/money";
 import type { Expense, ReceiptPhoto, SplitMode, Trip } from "../lib/types";
 import { useTrip } from "./useTrip";
 
@@ -90,6 +90,9 @@ function Form({ trip, me, existing, isSettlement, nameOf }: {
   const photoInput = useRef<HTMLInputElement>(null);
   const [photo, setPhoto] = useState<Blob | null>(null);
   const [showSaved, setShowSaved] = useState(false);
+  // Fields the user has typed in, so auto-filled remainders go to the others.
+  const partsTyped = useRef(new Set<string>());
+  const paidTyped = useRef(new Set<string>());
   const [saving, setSaving] = useState(false);
   const photoUrl = useMemo(() => (photo ? URL.createObjectURL(photo) : null), [photo]);
   useEffect(() => () => {
@@ -295,6 +298,37 @@ function Form({ trip, me, existing, isSettlement, nameOf }: {
     if (mode === "exact") return a + (parseAmount(parts[id] ?? "", currency) ?? 0);
     return a + (Number((parts[id] ?? "").replace(",", ".")) || 0);
   }, 0);
+  const parsePercent = (s: string) => {
+    const n = Number(s.trim().replace(",", "."));
+    return s.trim() && Number.isFinite(n) ? n : null;
+  };
+
+  function editPart(id: string, value: string) {
+    partsTyped.current.add(id);
+    const next = { ...parts, [id]: value };
+    if (mode === "exact") {
+      setParts(fillRemainder(next, id, partsTyped.current, amountMinor, (s) => parseAmount(s, currency), (n) => minorToInput(n, currency)));
+    } else if (mode === "percent") {
+      setParts(fillRemainder(next, id, partsTyped.current, 100, parsePercent, (n) => String(Math.round(n * 100) / 100)));
+    } else {
+      setParts(next);
+    }
+  }
+
+  function editPaid(id: string, value: string) {
+    paidTyped.current.add(id);
+    const next = { ...paid, [id]: value };
+    setPaid(fillRemainder(next, id, paidTyped.current, amountMinor, (s) => parseAmount(s, currency), (n) => minorToInput(n, currency)));
+  }
+
+  function leftLine(sum: number, total: number, fmt: (n: number) => string) {
+    const diff = total - sum;
+    if (Math.abs(diff) < 1e-9) return `${fmt(sum)} of ${fmt(total)}`;
+    return `${fmt(sum)} of ${fmt(total)} · ${fmt(Math.abs(diff))} ${diff > 0 ? "left" : "over"}`;
+  }
+  const money = (n: number) => formatMoney(n, currency);
+  const pct = (n: number) => `${Math.round(n * 100) / 100}%`;
+
   const sumPaid = ids.reduce((a, id) => a + (parseAmount(paid[id] ?? "", currency) ?? 0), 0);
 
   const rateLine = (() => {
@@ -324,7 +358,6 @@ function Form({ trip, me, existing, isSettlement, nameOf }: {
             ref={fileInput}
             type="file"
             accept="image/*"
-            capture="environment"
             hidden
             onChange={(e) => {
               const f = e.target.files?.[0];
@@ -336,7 +369,6 @@ function Form({ trip, me, existing, isSettlement, nameOf }: {
             ref={photoInput}
             type="file"
             accept="image/*"
-            capture="environment"
             hidden
             onChange={(e) => {
               const f = e.target.files?.[0];
@@ -431,11 +463,11 @@ function Form({ trip, me, existing, isSettlement, nameOf }: {
               {trip.people.map((p) => (
                 <label key={p.id} className="part">
                   <span>{p.name}</span>
-                  <input inputMode="decimal" value={paid[p.id]} onChange={(e) => setPaid({ ...paid, [p.id]: e.target.value })} />
+                  <input inputMode="decimal" value={paid[p.id]} onChange={(e) => editPaid(p.id, e.target.value)} />
                 </label>
               ))}
               <small className={sumPaid === amountMinor ? "muted" : "error"}>
-                {formatMoney(sumPaid, currency)} of {formatMoney(amountMinor, currency)}
+                {leftLine(sumPaid, amountMinor, money)}
               </small>
             </div>
           )}
@@ -444,7 +476,10 @@ function Form({ trip, me, existing, isSettlement, nameOf }: {
             <legend>Split</legend>
             <div className="seg">
               {(["equal", "shares", "percent", "exact"] as const).map((m) => (
-                <button key={m} type="button" className={mode === m ? "on" : ""} onClick={() => setMode(m)}>
+                <button key={m} type="button" className={mode === m ? "on" : ""} onClick={() => {
+                  partsTyped.current = new Set();
+                  setMode(m);
+                }}>
                   {m === "equal" ? "Equally" : m === "shares" ? "Shares" : m === "percent" ? "%" : "Amounts"}
                 </button>
               ))}
@@ -463,15 +498,15 @@ function Form({ trip, me, existing, isSettlement, nameOf }: {
                       inputMode="decimal"
                       value={parts[p.id]}
                       placeholder={mode === "shares" ? "0" : mode === "percent" ? "0 %" : "0.00"}
-                      onChange={(e) => setParts({ ...parts, [p.id]: e.target.value })}
+                      onChange={(e) => editPart(p.id, e.target.value)}
                     />
                   </label>
                 ),
               )}
-              {mode === "percent" && <small className={sumParts === 100 ? "muted" : "error"}>{sumParts}% of 100%</small>}
+              {mode === "percent" && <small className={Math.abs(sumParts - 100) < 1e-9 ? "muted" : "error"}>{leftLine(sumParts, 100, pct)}</small>}
               {mode === "exact" && (
                 <small className={sumParts === amountMinor ? "muted" : "error"}>
-                  {formatMoney(sumParts, currency)} of {formatMoney(amountMinor, currency)}
+                  {leftLine(sumParts, amountMinor, money)}
                 </small>
               )}
             </div>

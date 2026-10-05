@@ -128,3 +128,29 @@ export function validateSplit(e: Pick<Expense, "amountMinor" | "split" | "paidBy
   }
   return { ok: true };
 }
+
+/**
+ * After `edited` changes, put whatever is left of `total` into the one other field
+ * that should absorb it: the only field the user hasn't typed in yet, or with two
+ * people, simply the other one. Returns `values` unchanged when that's ambiguous
+ * or the remainder would be negative.
+ */
+export function fillRemainder(
+  values: Record<string, string>,
+  edited: string,
+  typed: ReadonlySet<string>,
+  total: number,
+  parse: (s: string) => number | null,
+  format: (n: number) => string,
+): Record<string, string> {
+  const others = Object.keys(values).filter((k) => k !== edited);
+  let target = others.filter((k) => !typed.has(k));
+  if (!target.length) target = others;
+  if (target.length !== 1) return values;
+  const used = Object.keys(values)
+    .filter((k) => k !== target[0])
+    .reduce((a, k) => a + (parse(values[k]) ?? 0), 0);
+  const rest = total - used;
+  if (rest < -1e-9) return values;
+  return { ...values, [target[0]]: format(Math.max(0, rest)) };
+}

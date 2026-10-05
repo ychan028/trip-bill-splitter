@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allocate, currencyDecimals, owedShares, parseAmount, validateSplit } from "./money";
+import { allocate, currencyDecimals, fillRemainder, owedShares, parseAmount, validateSplit } from "./money";
 
 describe("currencyDecimals", () => {
   it("knows zero- and two-decimal currencies", () => {
@@ -78,5 +78,30 @@ describe("validateSplit", () => {
   });
   it("rejects percent not summing to 100", () => {
     expect(validateSplit({ ...base, split: { mode: "percent", parts: { a: 50, b: 40 } } }).ok).toBe(false);
+  });
+});
+
+describe("fillRemainder", () => {
+  const parse = (s: string) => parseAmount(s, "EUR");
+  const format = (n: number) => (n / 100).toFixed(2);
+
+  it("adjusts the other person when there are two", () => {
+    const v = { a: "30.00", b: "44.00" };
+    expect(fillRemainder(v, "a", new Set(["a", "b"]), 6900, parse, format)).toEqual({ a: "30.00", b: "39.00" });
+  });
+
+  it("fills the only untyped field among three", () => {
+    const v = { a: "10", b: "20", c: "" };
+    expect(fillRemainder(v, "b", new Set(["a", "b"]), 6900, parse, format).c).toBe("39.00");
+  });
+
+  it("leaves things alone when more than one field could absorb it", () => {
+    const v = { a: "10", b: "", c: "" };
+    expect(fillRemainder(v, "a", new Set(["a"]), 6900, parse, format)).toBe(v);
+  });
+
+  it("doesn't go negative", () => {
+    const v = { a: "80", b: "44.00" };
+    expect(fillRemainder(v, "a", new Set(["a"]), 6900, parse, format)).toBe(v);
   });
 });
