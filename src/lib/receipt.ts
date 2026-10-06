@@ -8,16 +8,27 @@ export interface ReceiptGuess {
   merchant?: string;
 }
 
+// Words that mean "the final total". Compared without accents, so "kopā" matches
+// "kopa" and OCR that drops diacritics still works.
 const TOTAL_WORDS = [
-  "grand total", "total", "totale", "totaal", "gesamt", "gesamtbetrag", "summe", "zu zahlen", "ttc",
-  "montant", "a payer", "à payer", "importe", "a pagar", "celkem", "razem", "suma", "összesen",
-  "amount due", "balance due", "to pay", "betrag", "totalt", "yhteensä", "sum", "合計", "합계",
+  "grand total", "total", "totale", "totaal", "totalt", "gesamt", "gesamtbetrag", "zu zahlen", "ttc",
+  "a payer", "a pagar", "amount due", "balance due", "to pay", "celkem", "razem", "osszesen", "yhteensa",
+  "kopa", "kopsumma", "kokku", "is viso", "ukupno", "spolu", "skupaj", "toplam", "i alt", "συνολο",
+  "общо", "итого", "合計", "합계",
 ];
+// Words that are often the bill *before* service or tip, so only used when no
+// explicit total word is found (e.g. Latvian SUMMA → service → KOPĀ).
+const SUM_WORDS = ["summe", "summa", "suma", "sum", "betrag", "montant", "importe"];
 const NOT_TOTAL_WORDS = [
   "subtotal", "sub total", "sub-total", "zwischensumme", "sous-total", "subtotale", "tax", "vat", "mwst",
-  "ust", "iva", "tva", "btw", "dph", "change", "cash", "tendered", "rückgeld", "wechselgeld", "rendu",
-  "cambio", "tip", "trinkgeld", "pourboire", "card", "karte", "visa", "mastercard", "given", "gegeben",
+  "ust", "iva", "tva", "btw", "dph", "pvn", "change", "cash", "tendered", "ruckgeld", "wechselgeld", "rendu",
+  "cambio", "tip", "trinkgeld", "pourboire", "tejas nauda", "dzeramnauda", "card", "karte", "visa",
+  "mastercard", "given", "gegeben",
 ];
+
+function fold(s: string): string {
+  return s.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "");
+}
 
 const SYMBOLS: [RegExp, string][] = [
   [/€|\bEUR\b|\bEURO\b/i, "EUR"],
@@ -69,21 +80,46 @@ function hasDecimals(line: string) {
 }
 
 function findTotal(lines: string[]): number | undefined {
-  const lower = lines.map((l) => l.toLowerCase());
-  const candidates: number[] = [];
-  lower.forEach((l, i) => {
-    if (!TOTAL_WORDS.some((w) => l.includes(w))) return;
-    if (NOT_TOTAL_WORDS.some((w) => l.includes(w))) return;
+  const lower = lines.map(fold);
+  const amountNear = (i: number): number | undefined => {
     // The amount is usually on the same line, sometimes on the next one.
     for (const src of [lines[i], lines[i + 1] ?? ""]) {
       if (!hasDecimals(src)) continue;
       const nums = numbersIn(src);
-      if (nums.length) {
-        candidates.push(nums[nums.length - 1]);
-        break;
-      }
+      if (nums.length) return nums[nums.length - 1];
     }
-  });
+    return undefined;
+  };
+  const tier = (words: string[]) => {
+    const found: number[] = [];
+    lower.forEach((l, i) => {
+      if (!words.some((w) => l.includes(w)) || NOT_TOTAL_WORDS.some((w) => l.includes(w))) return;
+      const n = amountNear(i);
+      if (n != null) found.push(n);
+    });
+    return found;
+  };
+  let candidates = tier(TOTAL_WORDS);
+  if (!candidates.length) {
+    // A "sum" line may be the bill before service/tip. If a later amount equals
+    // the sum plus the amounts in between (111.00 + 11.10 = 122.10), that later
+    // amount is the real total even when OCR garbled its label.
+    lower.forEach((l, i) => {
+      if (!SUM_WORDS.some((w) => l.includes(w)) || NOT_TOTAL_WORDS.some((w) => l.includes(w))) return;
+      const s = amountNear(i);
+      if (s == null) return;
+      let running = s;
+      let total = s;
+      for (let j = i + 1; j < Math.min(lines.length, i + 9); j++) {
+        if (!hasDecimals(lines[j])) continue;
+        const nums = numbersIn(lines[j]);
+        const a = nums[nums.length - 1];
+        if (a > s && Math.abs(a - running) < 0.011) total = a;
+        running += a;
+      }
+      candidates.push(total);
+    });
+  }
   if (candidates.length) return Math.max(...candidates);
   // Fallback: largest decimal amount on a line that isn't payment/change/tax.
   const all: number[] = [];

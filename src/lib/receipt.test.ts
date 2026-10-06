@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { findDate, parseNumberToken, parseReceipt } from "./receipt";
 
@@ -42,6 +43,42 @@ Mancia suggerita 4.00`;
     expect(r.total).toBe(39.6);
     expect(r.currency).toBe("EUR");
     expect(r.date).toBe("2026-09-30");
+  });
+
+  // Latvian card slip: SUMMA is the bill, then a service charge, then KOPĀ (total).
+  it.each(["KOPĀ", "KOPA", "Kopā"])("Latvian card slip with service charge (%s)", (kopa) => {
+    const text = `paynt
+www.paynt.com
+05/10/2026 15:13:07
+MID: ****9492008321 7
+VISA
+405413******3283
+RĒKINA
+SUMMA € 111.00
+TĒJAS NAUDA/ € 11.10
+PAKALPOJUMA MAKSA
+${kopa} € 122.10
+APSTIPRINĀTS`;
+    const r = parseReceipt(text, new Date("2026-10-05T12:00:00Z"));
+    expect(r.total).toBe(122.1);
+    expect(r.currency).toBe("EUR");
+    expect(r.date).toBe("2026-10-05");
+  });
+
+  it("real phone OCR of the Latvian slip, where KOPĀ € was read as '(OPA £'", () => {
+    const text = readFileSync(new URL("./__fixtures__/latvian-card-slip.ocr.txt", import.meta.url), "utf8");
+    const r = parseReceipt(text, new Date("2026-10-05T12:00:00Z"));
+    expect(r.total).toBe(122.1);
+    expect(r.currency).toBe("EUR");
+    expect(r.date).toBe("2026-10-05");
+  });
+
+  it("keeps the sum when nothing after it adds up", () => {
+    expect(parseReceipt("Shop\nSumme 40,00\nKarte 40,00\nBonus points 120,00", today).total).toBe(40);
+  });
+
+  it("prefers an explicit total over a generic 'sum' line", () => {
+    expect(parseReceipt("Bar\nSumme 40,00\nService 4,00\nGesamt 44,00", today).total).toBe(44);
   });
 
   it("total on the following line", () => {

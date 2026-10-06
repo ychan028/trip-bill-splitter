@@ -34,7 +34,7 @@ const SCHEMA = {
     merchant: { type: ["string", "null"] },
     date: { type: ["string", "null"], description: "YYYY-MM-DD" },
     currency: { type: ["string", "null"], description: "ISO 4217 code, e.g. EUR" },
-    total: { type: ["number", "null"], description: "Final amount paid, including tax, excluding tip unless the tip was added to the bill" },
+    total: { type: ["number", "null"], description: "Grand total actually charged: the last total line (e.g. TOTAL, KOPĀ, GESAMT), including tax and any service charge or tip already added to the bill. Not a subtotal." },
     category: { type: ["string", "null"] },
     items: {
       type: "array",
